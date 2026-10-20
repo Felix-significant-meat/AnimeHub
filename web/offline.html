@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#111214">
+<title>Anime Hub — Offline</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<style>
+  :root { color-scheme: dark; }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:32px;background:#111214;color:#ecebe8;
+       font:15px/1.5 Inter, Geist, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+       background-image:radial-gradient(900px 520px at 88% -8%, rgba(111,155,212,.09), transparent 70%)}
+  .card{max-width:420px;text-align:center;display:grid;justify-items:center;gap:14px}
+  .mark{width:64px;height:64px}
+  h1{font-size:22px;letter-spacing:-.02em;margin:0}
+  p{margin:0;color:#8b9099}
+  .btn{margin-top:6px;display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:999px;border:0;
+       background:#6f9bd4;color:#0c1624;font:inherit;font-weight:650;cursor:pointer}
+  .btn:hover{background:#93b9ec}
+</style>
+</head>
+<body>
+<main class="card">
+  <svg class="mark" viewBox="0 0 128 128" aria-hidden="true">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#93b9ec"/><stop offset="1" stop-color="#6f9bd4"/></linearGradient></defs>
+    <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#g)"/>
+    <path d="M52 40v48l38-24-38-24z" fill="#0c1624"/>
+  </svg>
+  <h1>Can't reach your hub</h1>
+  <p>Anime Hub serves your library from the machine it runs on. This page was loaded from the offline cache, so the hub isn't answering right now.</p>
+  <p>Start the hub on your computer (same network), then try again.</p>
+  <button class="btn" onclick="location.reload()">Retry</button>
+</main>
+</body>
+</html>

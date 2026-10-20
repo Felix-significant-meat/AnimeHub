@@ -51,6 +51,41 @@ cargo build --release
 
 The server starts on `http://127.0.0.1:8787`.
 
+### Install as an app (PWA / Android)
+
+The web UI is a full PWA: open the hub in a Chromium browser (desktop or
+Android) and use **Install** — in Settings → App, or the browser's own
+address-bar prompt — for a home-screen/desktop icon that opens the interface
+in its own window, without browser chrome. On iPhone/iPad use Share → Add to
+Home Screen. A service worker caches the interface itself, so the app opens
+even when the hub is briefly unreachable; library data, artwork and playback
+are always live from the hub.
+
+**Using it from your phone.** The hub listens on `127.0.0.1` only by default.
+To open the PWA from a phone on the same network, enable LAN mode:
+
+```sh
+python3 hub.py --host lan        # one run
+```
+
+or permanently in the config file:
+
+```json
+{ "host": "lan" }
+```
+
+The startup line then prints the URL to open on the phone (e.g.
+`http://192.168.1.20:8787`). Requests are still checked against an allowlist of
+this machine's own names, so DNS-rebinding and foreign `Host` headers stay out
+— but LAN mode does expose your library and the hub's write API to everyone on
+that network, so keep it off on untrusted networks. Playback still happens in
+mpv on the machine running the hub, not on the phone.
+
+On a touch device the UI adapts: a bottom tab bar replaces the top-bar links,
+episode artwork shows its play button without hovering, a **press-and-hold** on
+an episode opens its actions as a bottom sheet (the touch equivalent of
+right-click), and the layout respects notches and gesture bars.
+
 ## Configuration
 
 `~/.config/anime-hub/config.json` (honours `XDG_CONFIG_HOME`; override
@@ -71,6 +106,7 @@ with `--config FILE`). All keys optional, a broken file only warns:
 | `port` | server port (default `8787`) |
 | `data_dir` | database and cache location (default `~/.local/share/anime-hub`, honours `XDG_DATA_HOME`) |
 | `window` | `"app"` (default, standalone Chromium window), `"browser"` (tab), `"none"` (server only; `--no-browser` forces it for one run) |
+| `host` | `"127.0.0.1"` (default, this machine only) or `"lan"` (reachable from other devices on the same network, for the PWA on a phone) |
 
 Changing `library_root` never deletes anything: the app reports the
 different folder and waits for you to connect it explicitly.

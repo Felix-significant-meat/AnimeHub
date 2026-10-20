@@ -20,6 +20,9 @@
   --r-m: 12px; --r-l: 16px; --r-xl: 22px;
   --hi: inset 0 1px 0 rgba(255, 255, 255, .05);
   --sh-pop: 0 24px 60px -14px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .05);
+  /* Bottom tab bar (touch layouts). A plain token, not a media query, so the
+     bar's own padding/height math and the body's reserved space always agree. */
+  --tabbar-h: 60px;
 }
 
 /* ───────── base ───────── */
@@ -450,18 +453,133 @@ code{background:var(--s2);padding:1px 6px;border-radius:6px;font-size:13px;word-
 #app.nav-in .srow{animation:rise .4s var(--ease) both}
 #app.nav-in .tabs button{animation:rise .45s var(--ease) both}#app.nav-in .tabs button:nth-child(2){animation-delay:.04s}#app.nav-in .tabs button:nth-child(3){animation-delay:.08s}#app.nav-in .tabs button:nth-child(n+4){animation-delay:.12s}
 
+/* ───────── mobile / touch (PWA) ───────── */
+/* The bottom tab bar: the phone-shaped navigation. Rendered by paintNav,
+   hidden on pointer devices where the top-bar links are always visible. */
+#tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:11;height:var(--tabbar-h);
+  padding:0 6px env(safe-area-inset-bottom,0px);
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(18px) saturate(1.5);
+  border-top:1px solid var(--line)}
+.tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:7px 2px;color:var(--mute);font-size:10.5px;font-weight:600;letter-spacing:.01em;border-radius:12px;
+  transition:color .18s,transform .14s var(--ease)}
+.tab .ico{width:21px;height:21px;stroke-width:1.7}
+.tab.on{color:var(--accent-hi)}
+.tab.on .ico{stroke-width:2.1}
+.tab:active{transform:scale(.93)}
+/* A live-playback badge on Home, and a pending-sync dot on Settings, so the
+   bar carries the same signals the desktop chips do. */
+.tab .tbadge{position:absolute;transform:translate(14px,-13px);width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg)}
+.tab .tbadge.warn{background:var(--warn)}
+.tab{position:relative}
+
+/* Touch devices have no hover: the affordances that appear on hover on the
+   desktop must simply be visible, and hover transforms must not stick. */
+@media (hover:none){
+  .dots{opacity:1;transform:none}
+  .hint{opacity:1;transform:none}
+  .ep .eplay{opacity:.92;transform:scale(1)}
+  .ep.off .eplay{opacity:0}
+  .card:hover .pw,.cont:hover,.airing:hover,.ep:hover,.hr:hover,.tile:hover,.cand:hover,.choice:hover{transform:none}
+  .card:hover .pw{box-shadow:0 8px 20px -14px rgba(0,0,0,.9)}
+  .cont:hover,.ep:hover{box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 12px 26px -18px #000}
+  .ep:hover .epimg,.cont:hover .cbg{transform:none}
+  .card:hover .poster img.ready{transform:none}
+  /* Tap targets: the desktop sizes assume a precise pointer. */
+  .arr,.heart,.dots,.stepper button,.btn.dp-up,.zrow .btn{min-width:44px;min-height:44px}
+  .dots{width:40px;height:40px;right:4px;top:4px}.dots .ico{width:18px;height:18px}
+  .chip,.link-btn,.pill{min-height:40px}
+  .switch{width:50px;height:30px}.switch:after{width:22px;height:22px}
+  .switch[aria-checked=true]:after{transform:translateX(20px)}
+  select,input{min-height:42px}
+  /* Links/rows are whole-row tap targets already; give them breathing room. */
+  .mi{padding:11px 12px}
+  .dp-dir{padding:11px 10px}
+  .hr{padding:12px 10px}
+  /* No tap-highlight flash on the custom controls; :active already responds. */
+  *{-webkit-tap-highlight-color:transparent}
+}
+
+/* iOS Safari zooms the whole page when a focused field is under 16px. */
+@media (max-width:1000px){
+  .search input,.dialog input,.dialog select,.row input,.path input,input[type=date],input[type=number],textarea{font-size:16px}
+}
+
+/* The episode context menu becomes a bottom sheet on touch: it is reached by
+   press-and-hold, and a sheet is both easier to hit and thumb-reachable. */
+#cm.sheet{left:0!important;right:0;top:auto!important;bottom:0;min-width:0;width:100%;
+  border-radius:var(--r-xl) var(--r-xl) 0 0;border-bottom:0;padding:8px 10px calc(12px + env(safe-area-inset-bottom,0px));
+  transform-origin:bottom center;animation:sheetIn .26s var(--ease) both}
+@keyframes sheetIn{from{transform:translateY(14px);opacity:.4}}
+#cm.sheet .cap{padding:6px 14px 10px;font-size:13px}
+#cm.sheet .mi{padding:14px 14px;font-size:15.5px;gap:14px}
+#cm.sheet .mi .ico{width:19px;height:19px}
+#cm.sheet:before{content:"";display:block;width:40px;height:4px;border-radius:2px;background:var(--line-hi);margin:4px auto 2px}
+
+/* Install affordance (Settings → App): shown where the browser offers it. */
+#installbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 12px);
+  z-index:30;display:flex;align-items:center;gap:12px;max-width:min(560px,94vw);padding:10px 12px 10px 16px;
+  background:color-mix(in srgb,var(--s2) 96%,transparent);backdrop-filter:blur(16px);
+  border:1px solid var(--line-hi);border-radius:var(--r-l);box-shadow:var(--sh-pop);animation:rise .35s var(--ease) both}
+#installbar .ico-wrap{display:flex;flex:none;color:var(--accent-hi)}
+#installbar .ico-wrap .ico{width:20px;height:20px}
+#installbar .it{flex:1;min-width:0}
+#installbar b{display:block;font-size:14.5px}
+#installbar small{display:block;color:var(--mute);font-size:12.5px;line-height:1.4}
+#installbar .btn{padding:8px 15px;font-size:14px;flex:none}
+@media (min-width:1001px){#installbar{bottom:24px}}
+
 /* ───────── responsive (the app is often zoomed to 150–175%, so ~1100–1300px matters) ───────── */
 @media (max-width:1250px){
   .wrap{padding:0 28px}#nav{padding:0 18px;gap:10px}.link{padding:6px 11px}.search{width:200px;margin-left:4px}.search:focus-within{width:280px}.np{max-width:150px}.backbtn{left:28px}
 }
+/* Tablet and below: single-column reading, and the top-bar links give way to
+   the bottom tab bar (#tabbar), which is the app-shaped navigation on
+   touch. The search field stays — it is the primary way around a library. */
 @media (max-width:1000px){
   .two,.body{grid-template-columns:1fr}.hero{grid-template-columns:150px 1fr;gap:24px}.hero h1{font-size:38px}
   .tiles{grid-template-columns:repeat(2,1fr)}.pgrid{grid-template-columns:1fr}
   .hr{grid-template-columns:44px 1fr 120px 90px}.hr .src{display:none}
-  .search{display:none}.eps{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}.strip{grid-auto-columns:minmax(300px,70%)}
+  .eps{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}.strip{grid-auto-columns:minmax(300px,70%)}
   .brand span{display:none}
+  #links{display:none}
+  #tabbar{display:flex}
+  .search{width:auto;flex:1;max-width:none;margin-left:6px}
+  .search:focus-within{width:auto}
+  /* Room for the bar itself + the home indicator on gesture-nav phones. */
+  body{padding-bottom:var(--tabbar-h)}
+  body{padding-bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px))}
+  .page{padding-bottom:40px}
+  #toast{bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 14px)}
+  .backbtn{top:calc(env(safe-area-inset-top,0px) + 70px)}
 }
-@media (max-width:640px){.wrap{padding:0 16px}#links{gap:0}.link{padding:6px 8px;font-size:14px}.hero{grid-template-columns:1fr}.hero .poster{display:none}.backbtn{left:16px}.np,.chip.sync{display:none}}
+@media (max-width:640px){
+  .wrap{padding:0 16px}.hero{grid-template-columns:1fr}.hero .poster{display:none}.backbtn{left:16px}.np,.chip.sync{display:none}
+  /* The hero art is the backdrop, so let it fill more of a short screen. */
+  .hhero{min-height:min(58vh,460px);padding:104px 0 40px}
+  .hhero h1{font-size:clamp(30px,9vw,44px)}
+  .wall{grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:26px 14px}
+  .card h3{font-size:13.5px}
+  .sec h2{font-size:20px}.eps-head h2{font-size:21px}
+  .tabs{gap:18px}.tabs button{font-size:17px}
+  .eps{grid-template-columns:1fr}
+  .strip{grid-auto-columns:minmax(260px,84%)}
+  /* History rows drop the columns a phone can't usefully show; the title
+     block keeps the episode text, which is the part that identifies a row. */
+  .hr{grid-template-columns:40px 1fr auto;gap:12px;padding:10px 4px}
+  .hr .hs,.hr>.src{display:none}
+  .hr:hover{transform:none}
+  .dialog{padding:24px 20px;border-radius:var(--r-l)}
+  .dialog h2{font-size:22px}
+  .actions{flex-direction:column-reverse}.actions .btn{width:100%}
+  .rh,.rr{grid-template-columns:1.3fr .8fr 92px;gap:10px}.rh>div:nth-child(4),.rr>.v:last-child{display:none}
+  .settings .srow{flex-direction:column;align-items:stretch;gap:12px}
+  .srow>.ctl,.srow .ctl{justify-content:flex-start}
+  .path{flex-wrap:wrap}.path input{min-width:100%}
+  .dp-list{height:210px}
+  .two{gap:34px}.body{gap:30px}
+  .fmt-split{gap:18px}
+}
 
 /* ───────── motion preferences ───────── */
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.hbg:before{transform:none}}

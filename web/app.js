@@ -44,6 +44,11 @@ const ICONS = {
   undo: ['<path d="M4 12a8 8 0 1 0 2.5-5.8L4 8.5M4 4v4.5h4.5"/>'],
   folder: ['<path d="M3.5 7.5a2 2 0 0 1 2-2h3.8l2.2 2.2h7a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>'],
   up: ['<path d="M12 19V5m-6 6 6-6 6 6"/>'],
+  /* Bottom tab bar (touch layouts). */
+  home: ['<path d="M4 10.6 12 4l8 6.6V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19z"/><path d="M9.6 20.6v-6.2h4.8v6.2"/>'],
+  grid: ['<rect x="3.6" y="3.6" width="7" height="7" rx="1.9"/><rect x="13.4" y="3.6" width="7" height="7" rx="1.9"/><rect x="3.6" y="13.4" width="7" height="7" rx="1.9"/><rect x="13.4" y="13.4" width="7" height="7" rx="1.9"/>'],
+  chart: ['<path d="M5 20V11.5M12 20V4.5M19 20v-6"/>'],
+  gear: ['<circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0 1.1 2.8h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.6 1.6 0 0 0-1.5 1z"/>'],
 };
 const ico = (n, c = "") => `<svg class="ico${ICONS[n][1] ? " ico-f" : ""}${c ? " " + c : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n][0]}</svg>`;
 const FMT = { TV: "TV", TV_SHORT: "TV short", MOVIE: "Movie", OVA: "OVA", ONA: "ONA", SPECIAL: "Special", MUSIC: "Music" };
@@ -831,6 +836,17 @@ function loadAlData() {
 const srow = (t, desc, ctl) => `<div class="srow"><div><b>${t}</b><p>${desc}</p></div><div class="ctl">${ctl}</div></div>`;
 const tgl = (key, label, on, off) => `<button class="switch" role="switch" aria-checked="${!!on}" aria-label="${esc(label)}" data-a="adv" data-v="${key}" ${off ? "disabled" : ""}></button>`;
 const toolRow = (name, path, hint) => srow(name, path ? `<code>${esc(path)}</code>` : esc(hint), `<span class="chip"><i class="dot ${path ? "ok" : ""}"></i>${path ? "found" : "not found"}</span>`);
+/* Settings → App: install as a PWA / check the offline shell. The row states
+   what applies to the device that is looking at it (already installed, an
+   offer available, iOS's manual path, or an unsupported browser). */
+function appRow() {
+  if (standalone()) return srow("Installed app", "Anime Hub is running as an installed app on this device — it opens in its own window, offline shell included.", '<span class="chip"><i class="dot ok"></i>installed</span>');
+  const o = installOffer();
+  if (o?.kind === "prompt") return srow("Install", "Add Anime Hub to your home screen or desktop: it opens in its own window, without browser chrome.", '<button class="btn pri" data-a="install">Install</button>');
+  if (o?.kind === "ios") return srow("Install", "On iPhone or iPad open the Share menu, then choose “Add to Home Screen”. It then opens full-screen like an app.", '<span class="chip"><i class="dot ok"></i>available</span>');
+  return srow("Install", "This browser doesn't offer app installation. On Chrome, Edge or Android it installs from here or from the address bar; on iOS use Share → Add to Home Screen.",
+    '<button class="btn" data-a="installhow">How to install</button>');
+}
 function Sett() {
   const s = S.settings, ani = S.ani || {};
   if (!s) { loadSettings().then(() => S.view === "settings" && render(true)); return '<div class="wrap page"><p class="empty">Could not reach the hub — retrying…</p></div>'; }
@@ -847,6 +863,7 @@ function Sett() {
     ${srow("Track episodes", "After playback marks an episode watched, publish the highest watched episode to AniList (single-season releases).", tgl("auto_progress_sync", "Track episodes", s.auto_progress_sync))}
     ${srow("Add shows automatically", "A first watch of a matched show that isn't on your lists adds it to Watching. Off by default.", tgl("auto_add_watch", "Add shows automatically", s.auto_add_watch))}
     ${srow(`Sync ratings<span class="soon">not built yet</span>`, "Keep scores in step between AniList and this device.", tgl("ratings", "Sync ratings", false, true))}</div>
+  <div class="group"><h3>App</h3>${appRow()}</div>
   <div class="group"><h3>Appearance</h3>${srow("Zoom", "Scales the whole interface on this device.", `<span class="zrow"><button class="btn" data-a="zoomout" aria-label="Zoom out">−</button><span class="zval" id="zoomval">${zoomGet()}%</span><button class="btn" data-a="zoomin" aria-label="Zoom in">+</button></span>`)}</div>
   <div class="group"><h3>Data</h3>${srow("Config file", `<code>${esc(s.config_path)}</code>`, "")}${srow("Data folder", `<code>${esc(s.data_dir)}</code>`, "")}${srow("Server", `Port ${esc(String(s.port))} · window mode “${esc(s.window)}”.`, "")}</div>
   <div class="group"><h3>Setup</h3>${srow("First-run tour", "Walk through the library folder and AniList again.", '<button class="btn" data-a="tour">Replay tour</button>')}</div></div></div>`;
@@ -975,12 +992,30 @@ function dlPop() {
     ${S.data?.stream_ready ? "" : '<p class="dl-empty">Install ani-cli to download episodes.</p>'}</div>`;
 }
 let navSig = "", nrLast = "";
+/* Bottom tab bar (touch layouts; hidden by CSS on pointer devices). Mirrors
+   the top-bar links so a phone gets app-shaped navigation that sits under
+   the thumb, and carries the same live signals as the desktop chips: a dot
+   on Home while something is playing, one on Settings while changes wait to
+   sync. */
+const TABS = [["home", "Home", "home"], ["library", "Library", "grid"], ["history", "History", "clock"], ["stats", "Stats", "chart"], ["settings", "Settings", "gear"]];
+function paintTabs() {
+  const bar = $("#tabbar");
+  if (!bar) return;
+  const cur = S.view === "show" ? "library" : S.view;
+  const playing = !!S.data?.now;
+  const badge = { home: playing ? "" : null, settings: S.outbox ? "warn" : null };
+  bar.innerHTML = TABS.map(([k, label, ic]) => {
+    const b = badge[k];
+    return `<button class="tab${cur === k ? " on" : ""}" ${cur === k ? 'aria-current="page"' : ""} data-a="go" data-v="${k}" aria-label="${label}">${ico(ic)}${b !== null && b !== undefined ? `<i class="tbadge ${b}"></i>` : ""}<span>${label}</span></button>`;
+  }).join("");
+}
 function paintNav() {
   const cur = S.view === "show" ? "library" : S.view;
   const links = $("#links");
-  links.innerHTML = [["home", "Home"], ["library", "Library"], ["history", "History"], ["stats", "Stats"], ["settings", "Settings"]]
+  links.innerHTML = [[ "home", "Home"], ["library", "Library"], ["history", "History"], ["stats", "Stats"], ["settings", "Settings"]]
     .map(([k, n]) => `<button class="link ${cur === k ? "on" : ""}" ${cur === k ? 'aria-current="page"' : ""} data-a="go" data-v="${k}">${n}</button>`).join("");
   glide(links);
+  paintTabs();
   $("#q").placeholder = alSearchable() ? "Search library or AniList" : "Search your library";
   const sr = $("#sr"), srHad = !!sr.firstElementChild;
   sr.innerHTML = S.menu === "sr" ? srHTML() : "";
@@ -1001,6 +1036,11 @@ function paintNav() {
 }
 
 /* ---------- context menu ---------- */
+/* Touch (and any narrow viewport) gets a bottom sheet instead of a menu
+   anchored to the pointer: there is no "right-click" on a phone, the sheet
+   is reached by press-and-hold (see the long-press handler below), and it
+   is far easier to hit with a thumb. The same markup drives both. */
+const sheetMode = () => matchMedia("(hover:none)").matches || innerWidth <= 640;
 function openCm(id, x, y) {
   const ctx = findEpContext(id);
   if (!ctx) return;
@@ -1014,8 +1054,30 @@ function openCm(id, x, y) {
     ${ep.position ? `<button class="mi" data-a="reset" data-v="${esc(id)}">${ico("undo")}Reset progress</button>` : ""}
     ${ok ? `<button class="mi" data-a="playmode" data-v="${esc(id)}" data-m="${other}">${ico("play")}Play ${other === "dub" ? "dubbed" : "subbed"}</button>` : ""}
     ${ok && !dlJob(id) ? `<button class="mi" data-a="dlep" data-v="${esc(id)}">${ico("download")}Download</button>` : ""}`;
-  m.style.animation = "none"; void m.offsetWidth; m.style.animation = "";
-  m.style.cssText += `;display:block;left:${Math.min(x, innerWidth - 250)}px;top:${Math.min(y, innerHeight - 240)}px`;
+  cmOpener = document.activeElement;
+  if (sheetMode()) {
+    m.classList.add("sheet");
+    m.style.cssText = "display:block";
+    m.setAttribute("role", "dialog");
+    m.setAttribute("aria-modal", "true");
+  } else {
+    m.classList.remove("sheet");
+    m.removeAttribute("role");
+    m.removeAttribute("aria-modal");
+    m.style.cssText = "";
+    m.style.animation = "none"; void m.offsetWidth; m.style.animation = "";
+    m.style.cssText += `;display:block;left:${Math.min(x, innerWidth - 250)}px;top:${Math.min(y, innerHeight - 240)}px`;
+  }
+  (m.querySelector(".mi") || m).focus?.();
+}
+let cmOpener = null, cmOpenedAt = 0;
+function closeCm(skipFocus) {
+  const m = $("#cm");
+  if (!m || m.style.display === "none" || !m.innerHTML) return false;
+  m.style.display = "none"; m.innerHTML = "";
+  const o = cmOpener; cmOpener = null;
+  if (!skipFocus) o && o.isConnected && o.focus && o.focus();
+  return true;
 }
 
 /* ---------- overlays ---------- */
@@ -1539,6 +1601,14 @@ const A = {
   season: (v) => { S.seasonIdx = +v; render(); },
   zoomin: () => zoomSet(zoomStep(zoomGet(), 1)),
   zoomout: () => zoomSet(zoomStep(zoomGet(), -1)),
+  /* PWA install (Settings → App, and the install bar). */
+  install: () => {
+    const o = installOffer();
+    if (o?.kind === "prompt") doInstall();
+    else if (o?.kind === "ios") toast("Open Share, then “Add to Home Screen”.");
+    else toast("This browser can't install apps — try Chrome, Edge or Android.");
+  },
+  installhow: () => toast("Chrome/Edge/Android: use the Install button (or the address bar). iPhone/iPad: Share → Add to Home Screen."),
   /* online episodes (ani-cli) */
   srcfix: () => { const s = showById(S.showId); if (s?.meta?.anilist_id) openSrc(s); },
   slsearch: () => { const text = ($("#slq")?.value || "").trim(); if (text && S.modal?.t === "src") slSearch(S.modal.mid, text, []); },
@@ -1707,9 +1777,13 @@ const A = {
 /* ---------- events ---------- */
 const isField = (t) => /^(SELECT|INPUT)$/.test(t.tagName);
 document.addEventListener("click", (e) => {
-  $("#cm").style.display = "none";
-  if (S.menu && !e.target.closest(".rel,.search")) { S.menu = null; paintNav(); }
+  /* Resolve the action target before closing the menu: closing empties #cm,
+     which would detach the very button that was just pressed. Focus is only
+     restored when the press was *not* a menu action (a menu item's own
+     action should take focus, not the tile that opened the menu). */
   const t = e.target.closest("[data-a]");
+  closeCm(!!t);
+  if (S.menu && !e.target.closest(".rel,.search")) { S.menu = null; paintNav(); }
   if (t && !t.disabled && !isField(t) && A[t.dataset.a]) A[t.dataset.a](t.dataset.v, t, e);
 });
 document.addEventListener("change", (e) => {
@@ -1784,6 +1858,41 @@ document.addEventListener("pointerdown", (e) => {
   s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
   t.appendChild(s); s.addEventListener("animationend", () => s.remove());
 }, { passive: true });
+/* Press-and-hold on an episode opens the same menu as right-click does on
+   the desktop — the only way a touch user reaches per-episode actions
+   (mark watched, reset, play the other audio, download). A short movement
+   or a lift before the timer cancels it, so scrolling and a plain tap are
+   never swallowed. */
+(() => {
+  let tm = 0, sx = 0, sy = 0, el = null;
+  const cancel = () => { clearTimeout(tm); tm = 0; el = null; };
+  document.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") return; // desktop keeps right-click
+    const t = e.target.closest && e.target.closest(".ep");
+    if (!t || !t.dataset.v) return;
+    el = t; sx = e.clientX; sy = e.clientY;
+    tm = setTimeout(() => {
+      tm = 0;
+      if (!el) return;
+      navigator.vibrate?.(12);
+      cmOpenedAt = Date.now();
+      openCm(el.dataset.v);
+    }, 480);
+  }, { passive: true });
+  document.addEventListener("pointermove", (e) => {
+    if (!tm) return;
+    if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancel();
+  }, { passive: true });
+  for (const ev of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(ev, cancel, { passive: true });
+  /* The sheet opens on hold, but the finger is still down: the click that
+     fires when it finally lifts would play the episode behind the sheet.
+     A freshly-opened sheet therefore swallows the next episode click. */
+  document.addEventListener("click", (e) => {
+    if (Date.now() - cmOpenedAt > 700) return;
+    if (!e.target.closest || !e.target.closest(".ep")) return;
+    e.stopPropagation(); e.preventDefault();
+  }, true);
+})();
 /* cursor-following sheen on cards; subtle 3D tilt on the detail poster */
 let pmRaf = 0;
 document.addEventListener("pointermove", (e) => {
@@ -1905,7 +2014,67 @@ reload().then(() => {
   if (hashRel && !showById("aid:" + hashRel[1])) { openRelease(+hashRel[1]); return; }
   if (hashShow && showById(decodeURIComponent(hashShow[1]))) { S.showId = decodeURIComponent(hashShow[1]); S.view = "show"; const s = showById(S.showId), t = pickTarget(s); S.seasonIdx = t ? Math.max(0, s.seasons.indexOf(t.sea)) : 0; S.navIn = true; render(); }
   else if (hashView) { S.view = hashView[1]; S.navIn = true; render(); }
-}).then(pollNow).then(loadSettings).then(maybeTour);
+}).then(pollNow).then(loadSettings).then(maybeTour).then(maybeInstallBar);
 
 addEventListener("error", (e) => { if (e.target === window) toast("UI error: " + e.message); });
 addEventListener("unhandledrejection", (e) => toast("UI error: " + (e.reason?.message || e.reason)));
+
+/* ---------- PWA: install + offline shell ----------
+   The hub is a local server, so "install" means a home-screen/desktop icon
+   that opens the UI like an app. Chromium fires `beforeinstallprompt` when
+   the manifest + service worker qualify; we stash it and surface a small,
+   dismissible bar (and a Settings row) instead of letting the browser show
+   its own mini-infobar. iOS has no such event — Safari only installs via
+   Share → Add to Home Screen, so the bar explains that path instead. */
+let installEvt = null;
+const standalone = () => matchMedia("(display-mode:standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const installDismissed = () => lsGet("hubInstallDismissed", false);
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); installEvt = e;
+  if (S.view === "settings") render();
+  maybeInstallBar();
+});
+addEventListener("appinstalled", () => {
+  installEvt = null;
+  lsSet("hubInstallDismissed", true);
+  $("#installbar")?.remove();
+  toast("Anime Hub installed");
+  if (S.view === "settings") render();
+});
+/* The offer is only useful where the app can actually be installed and has
+   not been dismissed. */
+function installOffer() {
+  if (standalone() || installDismissed()) return null;
+  if (installEvt) return { kind: "prompt" };
+  if (isIOS()) return { kind: "ios" };
+  return null;
+}
+async function doInstall() {
+  if (!installEvt) return;
+  installEvt.prompt();
+  try { await installEvt.userChoice; } catch {}
+  installEvt = null;
+  $("#installbar")?.remove();
+  if (S.view === "settings") render();
+}
+function maybeInstallBar() {
+  const old = $("#installbar");
+  const o = installOffer();
+  if (!o || (S.view === "settings" && o.kind === "prompt")) { old?.remove(); return; }
+  if (old) return;
+  const bar = document.createElement("div");
+  bar.id = "installbar";
+  bar.innerHTML = `<i class="ico-wrap">${ico("download")}</i><div class="it"><b>Install Anime Hub</b><small>${o.kind === "ios" ? "Tap Share, then “Add to Home Screen”." : "Keep it on your home screen, opened like an app."}</small></div>
+    <button class="btn pri" id="installgo">${o.kind === "ios" ? "Got it" : "Install"}</button><button class="chip ib" id="installno" aria-label="Dismiss">${ico("close")}</button>`;
+  document.body.appendChild(bar);
+  const go = bar.querySelector("#installgo");
+  go.addEventListener("click", () => (o.kind === "ios" ? (lsSet("hubInstallDismissed", true), bar.remove()) : doInstall()));
+  bar.querySelector("#installno").addEventListener("click", () => { lsSet("hubInstallDismissed", true); bar.remove(); });
+}
+/* The offline shell is what makes the app installable and lets the UI open
+   when the hub is briefly unreachable. Registered last so it never delays
+   the first paint; a failure (e.g. an old browser) is silent and harmless. */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
