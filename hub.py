@@ -47,7 +47,14 @@ SEP_NUM_RE = re.compile(r"^(?:ep(?:isode)?)\.?\s*(\d{1,4})", re.I)
 EPISODE_WORD_RE = re.compile(r"\bEpisode\s*(\d{1,4})\b", re.I)
 DEFAULT_PORT = 8787
 
-CONFIG_KEYS = ("library_root", "port", "data_dir", "window", "anilist_client_id", "upscale_banners")
+CONFIG_KEYS = ("library_root", "port", "data_dir", "window", "anilist_client_id", "upscale_banners", "host")
+
+# The hub is local-only by default (loopback). "lan" is an explicit opt-in so
+# a phone on the same network can open the PWA; it must never be the default
+# (it would publish the library — and the unauthenticated write API — to the
+# whole network). See resolve_bind_host / check_local.
+HOST_LOOPBACK = "127.0.0.1"
+HOST_LAN = "lan"
 
 # AnimeHub's public AniList OAuth client (redirect: http://localhost:8787/
 # auth/callback). Client ids are public by design — no secret involved;
@@ -87,6 +94,70 @@ def config_path_from_argv(argv=None):
     return None
 
 
+def host_from_argv(argv=None):
+    """`--host lan` (or an explicit local address) for one run, overriding the
+    config file — the quick way to let a phone in without editing anything."""
+    argv = sys.argv if argv is None else argv
+    if "--host" in argv:
+        i = argv.index("--host")
+        if i + 1 < len(argv):
+            return argv[i + 1].strip()
+    return None
+
+
+def local_addresses():
+    """This machine's own addresses and host name. Used by check_local in LAN
+    mode to decide which Host headers are 'ours': a DNS-rebinding attacker
+    sends its own domain (never listed here), while a phone typing the
+    machine's LAN address does match."""
+    names = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
+    try:
+        host = socket.gethostname()
+        names.add(host)
+        for info in socket.getaddrinfo(host, None):
+            names.add(info[4][0])
+    except OSError:
+        pass
+    return names
+
+
+_hosts_cache = {"at": 0.0, "names": set()}
+
+
+def allowed_hosts():
+    """The set of host names a request may carry. Cached briefly: a laptop
+    changes networks, so a set frozen at boot would lock the phone out after
+    a reconnect, while recomputing on every request would add a DNS lookup
+    to each one."""
+    now = time.time()
+    if now - _hosts_cache["at"] > 60 or not _hosts_cache["names"]:
+        _hosts_cache["names"] = local_addresses()
+        _hosts_cache["at"] = now
+    return _hosts_cache["names"]
+
+
+def lan_ip():
+    """Best-guess private address for printing/sharing. No traffic is sent —
+    the UDP connect only asks the kernel which interface it *would* use."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 1))  # TEST-NET-1: reserved, never routed
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def _lan_url():
+    """The URL another device on the same network uses, when LAN mode is on.
+    None in loopback mode — there is nothing to share."""
+    if HOST != HOST_LAN:
+        return None
+    ip = lan_ip()
+    return f"http://{ip}:{PORT}" if ip else None
+
+
 def read_config(path=None):
     """Read the config file (PLAN v0.1: replaces the hardcoded constants).
     A missing file is normal — defaults keep the app usable with no library
@@ -109,7 +180,7 @@ def read_config(path=None):
     path = Path(path).expanduser() if path else _default_config_path()
     cfg = {"library_root": None, "port": DEFAULT_PORT,
            "data_dir": None, "window": "app", "anilist_client_id": None,
-           "upscale_banners": False}
+           "upscale_banners": False, "host": HOST_LOOPBACK}
     warnings = []
     try:
         raw = json.loads(path.read_text())
@@ -150,6 +221,18 @@ def read_config(path=None):
         else:
             warn("window", "'app', 'browser' or 'none'")
 
+    if raw.get("host") not in (None, ""):
+        # Opt-in network exposure for phones/other devices on the LAN. Only
+        # these two spellings exist: loopback (default) and the LAN. A host
+        # string would tempt users into 0.0.0.0 or a public address, so it is
+        # intentionally not accepted — "lan" is the single, understandable
+        # switch, and it still binds the private interface only.
+        h = raw["host"]
+        if h in (HOST_LOOPBACK, HOST_LAN):
+            cfg["host"] = h
+        else:
+            warn("host", "'127.0.0.1' (local only) or 'lan' (same network)")
+
     if raw.get("anilist_client_id") not in (None, ""):
         cid = raw["anilist_client_id"]
         if isinstance(cid, int) and not isinstance(cid, bool) and cid > 0:
@@ -187,7 +270,7 @@ def apply_config(cfg):
     Re-derives the per-user paths from data_dir so a relocated data dir
     moves the database, cache and AniList state together (Decision 23.7:
     the identity model is root/config-aware from day one)."""
-    global DATA, CACHE, POSTERS, EPIMGS, DB, LIBRARY, PORT
+    global DATA, CACHE, POSTERS, EPIMGS, DB, LIBRARY, PORT, HOST
     global ANILIST_CACHE, WINDOW, ANILIST_TOKEN_FILE, ANILIST_CLIENT_ID, UPSCALE_BANNERS
     DATA = cfg["data_dir"] or _default_data_dir()
     CACHE = DATA / "cache"
@@ -196,6 +279,7 @@ def apply_config(cfg):
     DB = DATA / "hub.db"
     LIBRARY = cfg["library_root"]
     PORT = cfg["port"]
+    HOST = cfg.get("host") or HOST_LOOPBACK
     WINDOW = cfg["window"]
     ANILIST_CACHE = DATA / "anilist_cache.json"
     # OAuth token lives with the other per-user state — outside the repo
@@ -304,6 +388,12 @@ def settings_payload():
         "config_path": str(CONFIG_PATH),
         "port": PORT,
         "window": WINDOW,
+        # Network exposure (PWA on a phone): loopback by default, "lan" opt-in.
+        # lan_ip() is only probed in LAN mode — no reason to touch the network
+        # stack otherwise. It is what the Settings row shows to open the PWA
+        # on another device.
+        "host": HOST,
+        "lan_url": _lan_url(),
         "scan": dict(scan_state),
         "tools": {t: shutil.which(t) for t in ("mpv", "ani-cli", "upscayl")},
         # ani-cli bridge preferences: quality + default audio for new links.
@@ -4425,8 +4515,26 @@ class Handler(BaseHTTPRequestHandler):
         header (DNS rebinding) or a non-JSON POST body is never ours. The
         accepted port follows the configured one — a hardcoded value rejects
         every request from an alternate-port instance (TODO 22, hit live
-        during the config work). The JSON content-type gate lives in do_POST."""
-        if self.headers.get("Host", "") not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
+        during the config work). The JSON content-type gate lives in do_POST.
+
+        In LAN mode (config `"host": "lan"`) the accepted names broaden to
+        this machine's own addresses/hostname — still an allowlist, so a
+        rebinding attacker's domain is refused exactly as before. The port
+        check stays: the hub only ever answers on its configured port."""
+        host = self.headers.get("Host", "")
+        # Strip the port for name matching; keep it for the port check.
+        name, _, port = host.rpartition(":")
+        if not name or not port.isdigit():
+            name, port = host, str(PORT)  # no port given (e.g. ":8787"-less)
+        if port != str(PORT):
+            self.send_error(403)
+            return False
+        if HOST == HOST_LAN:
+            if name not in allowed_hosts():
+                self.send_error(403)
+                return False
+            return True
+        if name not in ("127.0.0.1", "localhost"):
             self.send_error(403)
             return False
         return True
@@ -4584,6 +4692,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send_file(WEB / "style.css", "text/css")
         elif route == "/app.js":
             self.send_file(WEB / "app.js", "text/javascript")
+        elif route == "/manifest.webmanifest":
+            # PWA manifest (installable app). Served with the spec's media
+            # type; wrong or missing types make browsers ignore it.
+            self.send_file(WEB / "manifest.webmanifest",
+                           "application/manifest+json; charset=utf-8")
+        elif route == "/sw.js":
+            # The service worker must be same-origin and, unlike every other
+            # asset, never stale-cached: a cached worker would pin the app to
+            # an old shell after an update. no-cache + Service-Worker-Allowed
+            # keeps updates immediate while scope stays the site root.
+            try:
+                body = (WEB / "sw.js").read_bytes()
+            except OSError:
+                self.send_error(404)
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Service-Worker-Allowed", "/")
+                self.end_headers()
+                self.wfile.write(body)
+        elif route == "/offline.html":
+            self.send_file(WEB / "offline.html", "text/html; charset=utf-8")
+        elif route == "/icon.svg":
+            self.send_file(WEB / "icon.svg", "image/svg+xml", cache=True)
+        elif route.startswith("/icons/"):
+            # PWA icons (incl. the maskable pair and the iOS touch icon).
+            name = os.path.basename(route)
+            if name.endswith(".png"):
+                self.send_file(WEB / "icons" / name, "image/png", cache=True)
+            else:
+                self.send_error(404)
         else:
             self.send_error(404)
 
@@ -4975,19 +5116,36 @@ def open_ui():
 
 
 def main():
+    global HOST
     no_browser = "--no-browser" in sys.argv
     for w in CONFIG_WARNINGS:
         print(f"anime-hub: {w}", file=sys.stderr, flush=True)
+    # --host overrides the config file for one run (quick phone access without
+    # editing anything). Same two accepted values as the config key.
+    arg_host = host_from_argv()
+    if arg_host is not None:
+        if arg_host in (HOST_LOOPBACK, HOST_LAN):
+            HOST = arg_host
+        else:
+            print(f"anime-hub: --host expects '{HOST_LOOPBACK}' (local only) "
+                  f"or '{HOST_LAN}' (same network), got {arg_host!r}.",
+                  file=sys.stderr, flush=True)
+            sys.exit(2)
     for d in (DATA, CACHE, POSTERS, EPIMGS):
         d.mkdir(parents=True, exist_ok=True)
     init_db()
+    # LAN mode must listen on all interfaces (the machine's address depends on
+    # the network); the Host allowlist in check_local is what keeps rebinding
+    # and stray names out. Loopback mode stays pinned to 127.0.0.1 so nothing
+    # is reachable from outside, period.
+    bind = "0.0.0.0" if HOST == HOST_LAN else HOST_LOOPBACK
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        server = ThreadingHTTPServer((bind, PORT), Handler)
     except OSError as e:
         # A bind failure must be readable (found by the cold-machine
         # simulation): the default case is a second instance or a taken
         # configured port, not a Python mystery.
-        print(f"anime-hub: cannot bind 127.0.0.1:{PORT} — {e}. "
+        print(f"anime-hub: cannot bind {bind}:{PORT} — {e}. "
               f"Is another instance already running, or is the configured 'port' taken?",
               file=sys.stderr, flush=True)
         sys.exit(1)
