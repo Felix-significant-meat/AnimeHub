@@ -112,6 +112,52 @@ def host_from_argv(argv=None):
     return None
 
 
+def _outbound_ip():
+    """The address of the interface the kernel would use for an outside
+    connection. No traffic is sent — the UDP connect only resolves a route,
+    which works even with no network reachable. Returns None on failure."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 1))  # TEST-NET-1: reserved, never routed
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def _interface_ips():
+    """This machine's own IPv4 addresses, asked of the network interfaces
+    directly.
+
+    `gethostname()` + `getaddrinfo` is not enough: a container or a host with
+    an unhelpful /etc/hosts resolves its own name to loopback only, so the
+    LAN address the user actually types never appears in the set. That made
+    `check_local` reject the very URL the startup banner advertises. Asking
+    the interfaces is authoritative and needs no name resolution."""
+    ips = set()
+    # ioctl(SIOCGIFADDR) per interface: portable across the Linux this runs on
+    # and dependency-free. Struct layout is the kernel's `ifreq`.
+    try:
+        import fcntl
+        import struct
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            for _, ifname in socket.if_nameindex():
+                try:
+                    packed = struct.pack("256s", ifname[:15].encode())
+                    addr = fcntl.ioctl(s.fileno(), 0x8915, packed)  # SIOCGIFADDR
+                    ips.add(socket.inet_ntoa(addr[20:24]))
+                except OSError:
+                    continue  # interface down, or no IPv4 address
+    except (ImportError, AttributeError, OSError):
+        pass
+    # Fallback (and a useful extra): whichever address a default route uses.
+    ip = _outbound_ip()
+    if ip:
+        ips.add(ip)
+    return ips
+
+
 def local_addresses():
     """This machine's own addresses and host name. Used by check_local in LAN
     mode to decide which Host headers are 'ours': a DNS-rebinding attacker
@@ -125,6 +171,7 @@ def local_addresses():
             names.add(info[4][0])
     except OSError:
         pass
+    names |= _interface_ips()
     return names
 
 
@@ -146,14 +193,7 @@ def allowed_hosts():
 def lan_ip():
     """Best-guess private address for printing/sharing. No traffic is sent —
     the UDP connect only asks the kernel which interface it *would* use."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("192.0.2.1", 1))  # TEST-NET-1: reserved, never routed
-        return s.getsockname()[0]
-    except OSError:
-        return None
-    finally:
-        s.close()
+    return _outbound_ip()
 
 
 def _lan_url():

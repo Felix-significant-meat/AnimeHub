@@ -1,0 +1,16 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+
+# Local runtime state (the hub keeps these outside the repo by default, but a
+# run from the checkout can drop them here)
+*.db
+*.db-wal
+*.db-shm
+
+# Desktop build output
+desktop/target/
+
+# Editor / OS noise
+.DS_Store
+*~

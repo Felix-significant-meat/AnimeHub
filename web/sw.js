@@ -10,7 +10,7 @@
 
    Bump CACHE on any release that changes the shell; old caches are
    dropped in `activate`. */
-const CACHE = "anime-hub-v1";
+const CACHE = "anime-hub-v2";
 const SHELL = [
   "/",
   "/index.html",
