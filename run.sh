@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PY="${PYTHON:-python3}"
 if ! command -v "$PY" >/dev/null 2>&1; then
-  echo "run.sh: python3 not found. Install Python 3.10 or newer and try again." >&2
+  echo "run.sh: python3 not found. Install Python 3.9 or newer and try again." >&2
   exit 1
 fi
 exec "$PY" hub.py "$@"

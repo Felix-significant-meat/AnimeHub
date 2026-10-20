@@ -42,14 +42,29 @@ This app is early in development — expect bugs and breaking changes.
 
 ## Run
 
+Nothing to build — the hub is a single Python file that serves the UI from
+`web/`. From the folder you downloaded or cloned:
+
 ```sh
-git clone https://github.com/Elias8832/AnimeHub.git
-cd AnimeHub/desktop
-cargo build --release
-./install.sh
+./run.sh
 ```
 
-The server starts on `http://127.0.0.1:8787`.
+Then open <http://127.0.0.1:8787>. Anything `hub.py` accepts works through it,
+e.g. `./run.sh --host lan` to reach it from a phone, or
+`./run.sh --config my-config.json`.
+
+The first run starts with no library: pick your anime folder in
+**Settings → Library** (or set `library_root` in the config file). mpv must be
+installed to play anything.
+
+### Optional: desktop launcher
+
+`desktop/` is a small Rust wrapper that opens the hub in its own window instead
+of a browser tab. It is not required to run or install the app.
+
+```sh
+cd desktop && cargo build --release && ./install.sh
+```
 
 ### Install as an app (PWA / Android)
 
