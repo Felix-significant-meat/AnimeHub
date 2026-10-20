@@ -75,7 +75,10 @@ or permanently in the config file:
 ```
 
 The startup line then prints the URL to open on the phone (e.g.
-`http://192.168.1.20:8787`). Requests are still checked against an allowlist of
+`http://192.168.1.20:8787`). Behind a reverse proxy or tunnel the `Host` header is the
+public name, not this machine's — add it to `allow_hosts` in the config so the
+hub accepts it (any other name still gets 403, which is the guard that keeps
+DNS-rebinding out): `{ "allow_hosts": ["hub.example.com"] }`. Requests are still checked against an allowlist of
 this machine's own names, so DNS-rebinding and foreign `Host` headers stay out
 — but LAN mode does expose your library and the hub's write API to everyone on
 that network, so keep it off on untrusted networks. Playback still happens in
@@ -107,6 +110,7 @@ with `--config FILE`). All keys optional, a broken file only warns:
 | `data_dir` | database and cache location (default `~/.local/share/anime-hub`, honours `XDG_DATA_HOME`) |
 | `window` | `"app"` (default, standalone Chromium window), `"browser"` (tab), `"none"` (server only; `--no-browser` forces it for one run) |
 | `host` | `"127.0.0.1"` (default, this machine only) or `"lan"` (reachable from other devices on the same network, for the PWA on a phone) |
+| `allow_hosts` | extra host names to accept, e.g. `["hub.example.com"]` — needed behind a reverse proxy or tunnel, which rewrites the `Host` header |
 
 Changing `library_root` never deletes anything: the app reports the
 different folder and waits for you to connect it explicitly.
