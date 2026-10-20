@@ -47,7 +47,7 @@ SEP_NUM_RE = re.compile(r"^(?:ep(?:isode)?)\.?\s*(\d{1,4})", re.I)
 EPISODE_WORD_RE = re.compile(r"\bEpisode\s*(\d{1,4})\b", re.I)
 DEFAULT_PORT = 8787
 
-CONFIG_KEYS = ("library_root", "port", "data_dir", "window", "anilist_client_id", "upscale_banners", "host")
+CONFIG_KEYS = ("library_root", "port", "data_dir", "window", "anilist_client_id", "upscale_banners", "host", "allow_hosts")
 
 # The hub is local-only by default (loopback). "lan" is an explicit opt-in so
 # a phone on the same network can open the PWA; it must never be the default
@@ -55,6 +55,13 @@ CONFIG_KEYS = ("library_root", "port", "data_dir", "window", "anilist_client_id"
 # whole network). See resolve_bind_host / check_local.
 HOST_LOOPBACK = "127.0.0.1"
 HOST_LAN = "lan"
+
+# Extra host names to accept, from config `allow_hosts`. Needed when the hub
+# sits behind something that rewrites Host — a reverse proxy, a tunnel, a
+# custom domain. Loopback and (in LAN mode) this machine's own names are
+# always accepted; anything else must be named here, so the DNS-rebinding
+# guard only widens to names the user actually asked for.
+ALLOWED_HOSTS = []
 
 # AnimeHub's public AniList OAuth client (redirect: http://localhost:8787/
 # auth/callback). Client ids are public by design — no secret involved;
@@ -180,7 +187,7 @@ def read_config(path=None):
     path = Path(path).expanduser() if path else _default_config_path()
     cfg = {"library_root": None, "port": DEFAULT_PORT,
            "data_dir": None, "window": "app", "anilist_client_id": None,
-           "upscale_banners": False, "host": HOST_LOOPBACK}
+           "upscale_banners": False, "host": HOST_LOOPBACK, "allow_hosts": []}
     warnings = []
     try:
         raw = json.loads(path.read_text())
@@ -233,6 +240,16 @@ def read_config(path=None):
         else:
             warn("host", "'127.0.0.1' (local only) or 'lan' (same network)")
 
+    if raw.get("allow_hosts") not in (None, ""):
+        # A list of extra host names (reverse proxy / tunnel / custom domain).
+        # Normalised to lower case, wildcards deliberately not supported: the
+        # point is a short, explicit list the user can audit.
+        v = raw["allow_hosts"]
+        if isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v):
+            cfg["allow_hosts"] = [x.strip().lower() for x in v]
+        else:
+            warn("allow_hosts", "a list of host names, e.g. [\"hub.example.com\"]")
+
     if raw.get("anilist_client_id") not in (None, ""):
         cid = raw["anilist_client_id"]
         if isinstance(cid, int) and not isinstance(cid, bool) and cid > 0:
@@ -270,7 +287,7 @@ def apply_config(cfg):
     Re-derives the per-user paths from data_dir so a relocated data dir
     moves the database, cache and AniList state together (Decision 23.7:
     the identity model is root/config-aware from day one)."""
-    global DATA, CACHE, POSTERS, EPIMGS, DB, LIBRARY, PORT, HOST
+    global DATA, CACHE, POSTERS, EPIMGS, DB, LIBRARY, PORT, HOST, ALLOWED_HOSTS
     global ANILIST_CACHE, WINDOW, ANILIST_TOKEN_FILE, ANILIST_CLIENT_ID, UPSCALE_BANNERS
     DATA = cfg["data_dir"] or _default_data_dir()
     CACHE = DATA / "cache"
@@ -280,6 +297,7 @@ def apply_config(cfg):
     LIBRARY = cfg["library_root"]
     PORT = cfg["port"]
     HOST = cfg.get("host") or HOST_LOOPBACK
+    ALLOWED_HOSTS = [h.lower() for h in (cfg.get("allow_hosts") or [])]
     WINDOW = cfg["window"]
     ANILIST_CACHE = DATA / "anilist_cache.json"
     # OAuth token lives with the other per-user state — outside the repo
@@ -4522,13 +4540,19 @@ class Handler(BaseHTTPRequestHandler):
         rebinding attacker's domain is refused exactly as before. The port
         check stays: the hub only ever answers on its configured port."""
         host = self.headers.get("Host", "")
-        # Strip the port for name matching; keep it for the port check.
+        # Split the port off for name matching; a request through a reverse
+        # proxy arrives as a bare domain (no :port), which implies the
+        # proxy's port, not ours — so a missing port is treated as ours.
         name, _, port = host.rpartition(":")
         if not name or not port.isdigit():
-            name, port = host, str(PORT)  # no port given (e.g. ":8787"-less)
+            name, port = host, str(PORT)
         if port != str(PORT):
             self.send_error(403)
             return False
+        # Names the user explicitly allowed (reverse proxy / tunnel / custom
+        # domain) are accepted in either mode.
+        if name.lower() in ALLOWED_HOSTS:
+            return True
         if HOST == HOST_LAN:
             if name not in allowed_hosts():
                 self.send_error(403)
