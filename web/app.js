@@ -844,6 +844,8 @@ function appRow() {
   const o = installOffer();
   if (o?.kind === "prompt") return srow("Install", "Add Anime Hub to your home screen or desktop: it opens in its own window, without browser chrome.", '<button class="btn pri" data-a="install">Install</button>');
   if (o?.kind === "ios") return srow("Install", "On iPhone or iPad open the Share menu, then choose “Add to Home Screen”. It then opens full-screen like an app.", '<span class="chip"><i class="dot ok"></i>available</span>');
+  if (o?.kind === "insecure") return srow("Install", "Unavailable on this address: the page is open over plain HTTP, which is not a secure context, so the browser blocks the offline app shell and its Install prompt. Open the hub over HTTPS — or on the machine running it (localhost) — and Install appears here.",
+    '<span class="chip"><i class="dot"></i>needs HTTPS</span>');
   return srow("Install", "This browser doesn't offer app installation. On Chrome, Edge or Android it installs from here or from the address bar; on iOS use Share → Add to Home Screen.",
     '<button class="btn" data-a="installhow">How to install</button>');
 }
@@ -1606,9 +1608,10 @@ const A = {
     const o = installOffer();
     if (o?.kind === "prompt") doInstall();
     else if (o?.kind === "ios") toast("Open Share, then “Add to Home Screen”.");
+    else if (o?.kind === "insecure") toast("Install needs a secure address — HTTPS or localhost. Plain HTTP blocks the offline app shell.");
     else toast("This browser can't install apps — try Chrome, Edge or Android.");
   },
-  installhow: () => toast("Chrome/Edge/Android: use the Install button (or the address bar). iPhone/iPad: Share → Add to Home Screen."),
+  installhow: () => toast("Chrome/Edge/Android: Install button or address bar — needs HTTPS or localhost. iPhone/iPad: Share → Add to Home Screen."),
   /* online episodes (ani-cli) */
   srcfix: () => { const s = showById(S.showId); if (s?.meta?.anilist_id) openSrc(s); },
   slsearch: () => { const text = ($("#slq")?.value || "").trim(); if (text && S.modal?.t === "src") slSearch(S.modal.mid, text, []); },
@@ -2030,6 +2033,15 @@ let installEvt = null;
 const standalone = () => matchMedia("(display-mode:standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const installDismissed = () => lsGet("hubInstallDismissed", false);
+/* Service workers and the Install prompt exist only in a *secure context*:
+   HTTPS, or localhost. Plain-HTTP LAN — http://192.168.x.x:8787 from a phone —
+   is not one, so the browser removes `navigator.serviceWorker` entirely and no
+   install event ever fires. That is a platform rule we cannot opt out of, so
+   the UI says so plainly instead of offering an Install that cannot happen. */
+const isLocalHost = () => /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname);
+const secureCtx = () => (typeof window.isSecureContext === "boolean"
+  ? window.isSecureContext
+  : location.protocol === "https:" || isLocalHost());
 addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault(); installEvt = e;
   if (S.view === "settings") render();
@@ -2047,7 +2059,11 @@ addEventListener("appinstalled", () => {
 function installOffer() {
   if (standalone() || installDismissed()) return null;
   if (installEvt) return { kind: "prompt" };
+  /* iOS is checked before the secure-context test on purpose: Safari's Add to
+     Home Screen works over plain HTTP too (it makes a web clip, so it opens
+     standalone), even though the offline shell cannot run there. */
   if (isIOS()) return { kind: "ios" };
+  if (!secureCtx()) return { kind: "insecure" };
   return null;
 }
 async function doInstall() {
@@ -2058,18 +2074,25 @@ async function doInstall() {
   $("#installbar")?.remove();
   if (S.view === "settings") render();
 }
+const INSTALL_COPY = {
+  prompt: ["Install Anime Hub", "Keep it on your home screen, opened like an app.", "Install"],
+  ios: ["Install Anime Hub", "Tap Share, then “Add to Home Screen”.", "Got it"],
+  insecure: ["Install needs a secure address", "Plain HTTP blocks the offline app shell, so the browser will not offer Install. Use HTTPS, or open the hub on the machine that runs it.", "Got it"],
+};
 function maybeInstallBar() {
   const old = $("#installbar");
   const o = installOffer();
   if (!o || (S.view === "settings" && o.kind === "prompt")) { old?.remove(); return; }
   if (old) return;
+  const c = INSTALL_COPY[o.kind];
+  if (!c) return;
   const bar = document.createElement("div");
   bar.id = "installbar";
-  bar.innerHTML = `<i class="ico-wrap">${ico("download")}</i><div class="it"><b>Install Anime Hub</b><small>${o.kind === "ios" ? "Tap Share, then “Add to Home Screen”." : "Keep it on your home screen, opened like an app."}</small></div>
-    <button class="btn pri" id="installgo">${o.kind === "ios" ? "Got it" : "Install"}</button><button class="chip ib" id="installno" aria-label="Dismiss">${ico("close")}</button>`;
+  bar.innerHTML = `<i class="ico-wrap">${ico("download")}</i><div class="it"><b>${c[0]}</b><small>${c[1]}</small></div>
+    <button class="btn pri" id="installgo">${c[2]}</button><button class="chip ib" id="installno" aria-label="Dismiss">${ico("close")}</button>`;
   document.body.appendChild(bar);
-  const go = bar.querySelector("#installgo");
-  go.addEventListener("click", () => (o.kind === "ios" ? (lsSet("hubInstallDismissed", true), bar.remove()) : doInstall()));
+  bar.querySelector("#installgo").addEventListener("click", () =>
+    (o.kind === "prompt" ? doInstall() : (lsSet("hubInstallDismissed", true), bar.remove())));
   bar.querySelector("#installno").addEventListener("click", () => { lsSet("hubInstallDismissed", true); bar.remove(); });
 }
 /* The offline shell is what makes the app installable and lets the UI open

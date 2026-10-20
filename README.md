@@ -53,16 +53,37 @@ The server starts on `http://127.0.0.1:8787`.
 
 ### Install as an app (PWA / Android)
 
-The web UI is a full PWA: open the hub in a Chromium browser (desktop or
-Android) and use **Install** — in Settings → App, or the browser's own
-address-bar prompt — for a home-screen/desktop icon that opens the interface
-in its own window, without browser chrome. On iPhone/iPad use Share → Add to
-Home Screen. A service worker caches the interface itself, so the app opens
-even when the hub is briefly unreachable; library data, artwork and playback
-are always live from the hub.
+The web UI is a PWA: open the hub in a Chromium browser (desktop or Android)
+and use **Install** — in Settings → App, or the browser's own address-bar
+prompt — for a home-screen/desktop icon that opens the interface in its own
+window, without browser chrome. On iPhone/iPad use Share → Add to Home Screen.
+A service worker caches the interface itself, so the app opens even when the
+hub is briefly unreachable; library data, artwork and playback are always live
+from the hub.
+
+> **Installing needs a secure context.** Browsers only expose service workers
+> and the Install prompt on `https://` or `localhost`. Over plain HTTP, a phone
+> opening `http://192.168.1.20:8787` gets a **working UI but no Install button
+> and no offline shell** — the browser removes `navigator.serviceWorker`
+> entirely, and this is a platform rule no server can opt out of. Settings → App
+> says so instead of offering an Install that cannot happen.
+>
+> So the two ways to get a real installed app on a phone are:
+>
+> 1. **Serve it over HTTPS** — put the hub behind a TLS reverse proxy or a
+>    tunnel (Cloudflare Tunnel, `caddy`, `nginx` + a certificate), and list the
+>    public name in `allow_hosts` so the `Host` guard accepts it.
+> 2. **Serve it from the phone itself** if the library is on the phone — then
+>    the origin is `localhost` and Install works.
+>
+> On **plain-HTTP LAN the hub is still useful** — browse the library, see what
+> is next, track progress — but it stays a browser page, and offline does not
+> work. Safari on iOS is the one exception: Share → Add to Home Screen makes a
+> web clip that opens standalone even over HTTP, though still with no offline
+> shell.
 
 **Using it from your phone.** The hub listens on `127.0.0.1` only by default.
-To open the PWA from a phone on the same network, enable LAN mode:
+To open it from a phone on the same network, enable LAN mode:
 
 ```sh
 python3 hub.py --host lan        # one run
@@ -75,14 +96,15 @@ or permanently in the config file:
 ```
 
 The startup line then prints the URL to open on the phone (e.g.
-`http://192.168.1.20:8787`). Behind a reverse proxy or tunnel the `Host` header is the
-public name, not this machine's — add it to `allow_hosts` in the config so the
-hub accepts it (any other name still gets 403, which is the guard that keeps
-DNS-rebinding out): `{ "allow_hosts": ["hub.example.com"] }`. Requests are still checked against an allowlist of
-this machine's own names, so DNS-rebinding and foreign `Host` headers stay out
-— but LAN mode does expose your library and the hub's write API to everyone on
-that network, so keep it off on untrusted networks. Playback still happens in
-mpv on the machine running the hub, not on the phone.
+`http://192.168.1.20:8787`). That address is accepted as this machine's own, so
+`Host` checks pass without configuration. Behind a reverse proxy or tunnel the
+`Host` header is the public name instead — add it to `allow_hosts` so the hub
+accepts it (any other name still gets 403, the guard that keeps DNS-rebinding
+out): `{ "allow_hosts": ["hub.example.com"] }`. Requests are still checked
+against an allowlist of this machine's own names, so DNS-rebinding and foreign
+`Host` headers stay out — but LAN mode does expose your library and the hub's
+write API to everyone on that network, so keep it off on untrusted networks.
+Playback still happens in mpv on the machine running the hub, not on the phone.
 
 On a touch device the UI adapts: a bottom tab bar replaces the top-bar links,
 episode artwork shows its play button without hovering, a **press-and-hold** on
