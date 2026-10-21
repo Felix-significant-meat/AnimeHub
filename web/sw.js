@@ -10,7 +10,7 @@
 
    Bump CACHE on any release that changes the shell; old caches are
    dropped in `activate`. */
-const CACHE = "anime-hub-v2";
+const CACHE = "anime-hub-v3";
 const SHELL = [
   "/",
   "/index.html",
@@ -42,15 +42,26 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+const SHELL_SET = new Set(SHELL);
+
 /* Artwork cache needs a ceiling: browsing a large library could otherwise
-   grow storage without bound. Only the artwork caches are pruned; the shell
-   cache always keeps its entries. */
+   grow storage without bound. Only artwork is ever evicted.
+
+   The shell entries are inserted during install, so they are the *oldest*
+   keys: trimming oldest-first would evict the app itself before touching a
+   single poster, and the offline shell would break exactly when the cache is
+   busiest. So prune filters to artwork instead of trusting insertion order. */
 const ART_LIMIT = 400;
+const isArt = (u) => {
+  try { const p = new URL(u, self.location.origin).pathname;
+        return p.startsWith("/img/") || p.startsWith("/epimg/"); }
+  catch { return false; }
+};
 async function prune(cacheName, keep) {
   const c = await caches.open(cacheName);
-  const keys = await c.keys();
-  if (keys.length <= keep) return;
-  for (const k of keys.slice(0, keys.length - keep)) await c.delete(k);
+  const art = (await c.keys()).filter((k) => isArt(k.url));
+  if (art.length <= keep) return;
+  for (const k of art.slice(0, art.length - keep)) await c.delete(k);
 }
 
 self.addEventListener("fetch", (e) => {
@@ -65,6 +76,12 @@ self.addEventListener("fetch", (e) => {
   // watch state, which is exactly the thing that must never be wrong.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
+  // Never store verification files. A cached assetlinks.json would keep
+  // pointing at an old package name or certificate after the app is rebuilt,
+  // and a mismatch fails silently: the Android app just loses its fullscreen
+  // mode, with no error to chase.
+  if (url.pathname.startsWith("/.well-known/")) return;
+
   if (req.mode === "navigate") {
     e.respondWith(
       fetch(req)
@@ -78,12 +95,14 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  if (url.pathname.startsWith("/img/") || url.pathname.startsWith("/epimg/")) {
+  if (isArt(req.url)) {
+    // Artwork keeps exact-key matching: its ?v=<mtime> is real cache-busting,
+    // and honouring it is the whole point.
     e.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         if (res && res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).then(() => prune(CACHE, ART_LIMIT + SHELL.length)).catch(() => {});
+          caches.open(CACHE).then((c) => c.put(req, copy)).then(() => prune(CACHE, ART_LIMIT)).catch(() => {});
         }
         return res;
       }))
@@ -91,9 +110,29 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Shell assets: serve from cache instantly, refresh in the background.
+  /* Shell assets. index.html asks for them with a cache-buster
+     (/style.css?v=118, /app.js?v=122) while install cached the bare path —
+     so an exact-key match missed, and offline the page came up unstyled with
+     no JavaScript at all. Match on the path alone and store under the bare
+     path, so versioned and unversioned requests share one entry. */
+  if (SHELL_SET.has(url.pathname)) {
+    const key = url.pathname;
+    e.respondWith(
+      caches.match(key).then((hit) => {
+        const net = fetch(req).then((res) => {
+          if (res && res.ok) caches.open(CACHE).then((c) => c.put(key, res.clone())).catch(() => {});
+          return res;
+        }).catch(() => hit);
+        return hit || net;
+      })
+    );
+    return;
+  }
+
+  // Anything else same-origin: cache first (query ignored, so a stray ?v=
+  // still finds a hit), refreshed in the background.
   e.respondWith(
-    caches.match(req).then((hit) => {
+    caches.match(req, { ignoreSearch: true }).then((hit) => {
       const net = fetch(req).then((res) => {
         if (res && res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone())).catch(() => {});
         return res;

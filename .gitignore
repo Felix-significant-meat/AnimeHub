@@ -11,6 +11,12 @@ __pycache__/
 # Desktop build output
 desktop/target/
 
+# Android signing material — never commit. The keystore is the app's identity:
+# anyone holding it (and its password) can sign updates Android accepts as you.
+*.keystore
+*.jks
+signing-key-info.txt
+
 # Editor / OS noise
 .DS_Store
 *~
