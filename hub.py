@@ -4789,6 +4789,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(WEB / "icons" / name, "image/png", cache=True)
             else:
                 self.send_error(404)
+        elif route == "/.well-known/assetlinks.json":
+            # Digital Asset Links for the Android app built from this site
+            # (PWABuilder / Bubblewrap produce a Trusted Web Activity).
+            #
+            # A TWA only opens fullscreen, without the browser's address bar,
+            # if the site proves it owns the app: at this exact path Android
+            # must find the APK's package name and signing fingerprint. The
+            # check is silent — a 404 or a fingerprint that does not match the
+            # installed APK downgrades the app to a Custom Tab with a visible
+            # URL bar, with no error anywhere. So this path is served from a
+            # real file the user can edit, and never cached: Google's verifier
+            # re-fetches it, and a stale answer would pin an old package name.
+            self.send_file(WEB / ".well-known" / "assetlinks.json",
+                           "application/json; charset=utf-8")
         else:
             self.send_error(404)
 

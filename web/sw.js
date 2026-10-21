@@ -76,6 +76,12 @@ self.addEventListener("fetch", (e) => {
   // watch state, which is exactly the thing that must never be wrong.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
+  // Never store verification files. A cached assetlinks.json would keep
+  // pointing at an old package name or certificate after the app is rebuilt,
+  // and a mismatch fails silently: the Android app just loses its fullscreen
+  // mode, with no error to chase.
+  if (url.pathname.startsWith("/.well-known/")) return;
+
   if (req.mode === "navigate") {
     e.respondWith(
       fetch(req)

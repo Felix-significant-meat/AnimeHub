@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ai.novita.sandbox.app_8799_i782ybzgyic7y44r841gv_ecea8f22.twa",
+    "sha256_cert_fingerprints": ["9B:32:C7:76:77:88:E7:7F:F2:1D:83:3D:EE:A8:F2:38:CD:CF:E8:1B:09:92:4D:C8:D3:A4:67:6A:F1:2B:FA:1B"]
+  }
+}]

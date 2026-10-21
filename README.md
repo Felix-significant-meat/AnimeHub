@@ -121,6 +121,31 @@ against an allowlist of this machine's own names, so DNS-rebinding and foreign
 write API to everyone on that network, so keep it off on untrusted networks.
 Playback still happens in mpv on the machine running the hub, not on the phone.
 
+### Android app (Trusted Web Activity)
+
+`android/` holds the hub packaged as an Android app with PWABuilder — a Trusted
+Web Activity, i.e. a thin shell that renders the same site fullscreen, without
+the browser's address bar. `android/dist/` contains the installable `.apk` and
+the Play-ready `.aab`; see [`android/README.md`](android/README.md) for how to
+rebuild it against your own address.
+
+For a Trusted Web Activity to keep its fullscreen mode, Android must be able to
+verify that the site owns the app, by fetching
+`https://<your-address>/.well-known/assetlinks.json` and comparing the package
+name and signing fingerprint to the installed APK. The hub serves that file from
+`web/.well-known/assetlinks.json`. If it is missing or the fingerprint does not
+match, the app still runs but shows a browser address bar, and nothing reports an
+error — so after rebuilding the app, update that file too.
+
+> The packages in `android/dist/` were generated against a temporary sandbox
+> address and only open while that address exists. Build your own against your
+> own HTTPS address before relying on them.
+
+> **The signing keystore is not in this repository, by design.** `.gitignore`
+> excludes `*.keystore`, `*.jks` and `signing-key-info.txt`: the keystore is the
+> app's identity, and anyone holding it can sign updates that Android accepts as
+> yours. Keep it (and its password) in a password manager with an offline backup.
+
 On a touch device the UI adapts: a bottom tab bar replaces the top-bar links,
 episode artwork shows its play button without hovering, a **press-and-hold** on
 an episode opens its actions as a bottom sheet (the touch equivalent of
